@@ -1,0 +1,24 @@
+div.well.light-zone {
+  margin-bottom: 0px;
+}
+
+p.light-zone-title {
+  margin: 0px;
+  text-align: center;
+}
+
+div.light-zone {
+  border-width: 3px;
+}
+
+div.light-power-on {
+  border-color: white;
+}
+
+div.light-power-off {
+  border-color: black;
+}
+
+div.light-power-null {
+  border-color: grey;
+}
