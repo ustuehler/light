@@ -1,0 +1,20 @@
+{
+  "bind": "0.0.0.0",
+  "port": 4567,
+
+  "regions": {
+    "House": {
+      "type": "limitlessled-rgbw",
+      "host": "10.10.100.254",
+      "port": 8899,
+
+      "zones": {
+        "0": { "name": "All" },
+        "1": { "name": "Room 1" },
+        "2": { "name": "Room 2" },
+        "3": { "name": "Room 3" },
+        "4": { "name": "Room 4" }
+      }
+    }
+  }
+}

@@ -9,9 +9,10 @@ require 'json'
 require 'color'
 require 'colorize'
 
-set :bind, '0.0.0.0'
-
 $config = JSON.parse(File.read('config.json'))
+
+set :bind, $config['bind'] if $config.has_key? 'bind'
+set :port, $config['port'] if $config.has_key? 'port'
 
 $queue ||= Queue.new
 
@@ -19,7 +20,7 @@ $worker ||= Thread.new do
   while true
     request = $queue.pop
     begin
-      puts "[#{Thread.current}] processing #{request.inspect}".blue
+      #puts "[#{Thread.current}] processing #{request.inspect}".blue
       process_request request
     rescue Exception => e
       puts [e.message, *e.backtrace].map { |line| "[#{Thread.current}] #{line}" }
@@ -200,14 +201,14 @@ class Bridge::LimitlessLed < Bridge
     unless brightness.is_a?(Fixnum) and brightness.between?(2, 27)
       raise "invalid brightness: #{brightness.inspect}"
     end
-    puts "ZONE #{zone} BRIGHTNESS #{brightness}".red
+    #puts "ZONE #{zone} BRIGHTNESS #{brightness}".red
     power_on zone
     sleep 0.1
     send 0x4e, brightness, 0x55
   end
 
   def white(zone)
-    puts "ZONE #{zone} WHITE".red
+    #puts "ZONE #{zone} WHITE".red
     power_on zone
     sleep 0.1
     send zone == 0 ? 0xc2 : 0xc5 + ((zone-1)*2), 0x00, 0x55
@@ -217,19 +218,19 @@ class Bridge::LimitlessLed < Bridge
     unless color.is_a?(Fixnum) and color.between?(0, 255)
       raise "invalid color: #{color.inspect}"
     end
-    puts "ZONE #{zone} COLOR #{color}".red
+    #puts "ZONE #{zone} COLOR #{color}".red
     power_on zone
     sleep 0.1
     send 0x40, color, 0x55
   end
 
   def power_on(zone)
-    puts "ZONE #{zone} ON".red
+    #puts "ZONE #{zone} ON".red
     send zone == 0 ? 0x42 : 0x45 + ((zone-1)*2), 0x00, 0x55
   end
 
   def power_off(zone)
-    puts "ZONE #{zone} OFF".red
+    #puts "ZONE #{zone} OFF".red
     send zone == 0 ? 0x41 : 0x46 + ((zone-1)*2), 0x00, 0x55
   end
 
@@ -240,7 +241,7 @@ class Bridge::LimitlessLed < Bridge
       puts "(waiting #{delay * 1000} ms)"
       sleep delay
     end
-    puts "UDP: #{bytes.map { |byte| "%02X" % byte}.join ' '}".red
+    #puts "UDP: #{bytes.map { |byte| "%02X" % byte}.join ' '}".red
     @socket.send bytes.pack('C*'), 0
     @last_send = Time.now
   end
@@ -298,7 +299,7 @@ class Bridge::LimitlessLed < Bridge
 
     def apply(settings)
       old_brightness, old_color, old_color_code, old_power = brightness, color, @color_code, power
-      puts "zone #{@zone} settings: #{settings.inspect}"
+      #puts "zone #{@zone} settings: #{settings.inspect}"
       begin
         self.brightness = settings['brightness'] if settings.has_key?('brightness')
         self.color      = settings['color']      if settings.has_key?('color')
@@ -308,10 +309,10 @@ class Bridge::LimitlessLed < Bridge
         raise
       end
 
-      puts "zone #{@zone} brightness: #{old_brightness.inspect} => #{@brightness.inspect}".green if old_brightness != @brightness
-      puts "zone #{@zone} color: #{old_color.inspect} => #{@color.inspect}".green if old_color != @color
-      puts "zone #{@zone} color code: #{old_color_code.inspect} => #{@color_code.inspect}".green if old_color_code != @color_code
-      puts "zone #{@zone} power: #{old_power.inspect} => #{@power.inspect}".green if old_power != @power
+      #puts "zone #{@zone} brightness: #{old_brightness.inspect} => #{@brightness.inspect}".green if old_brightness != @brightness
+      #puts "zone #{@zone} color: #{old_color.inspect} => #{@color.inspect}".green if old_color != @color
+      #puts "zone #{@zone} color code: #{old_color_code.inspect} => #{@color_code.inspect}".green if old_color_code != @color_code
+      #puts "zone #{@zone} power: #{old_power.inspect} => #{@power.inspect}".green if old_power != @power
 
       if old_power != @power and !@power
         @bridge.power_off @zone
