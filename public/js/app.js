@@ -18,25 +18,25 @@ var updateView = function (data) {
       regionDiv.find('.light-region-title').text(region);
 
       for (var zone in data[region]) {
-	var zoneDiv = hiddenZoneDiv.clone();
+        var zoneDiv = hiddenZoneDiv.clone();
         var zoneData = data[region][zone];
 
-	zoneDiv.attr('light-zone', zone);
-	zoneDiv.find('.light-zone-title').text(zoneData['name'] || zone);
+        zoneDiv.attr('light-zone', zone);
+        zoneDiv.find('.light-zone-title').text(zoneData['name'] || zone);
 
-	zoneDiv.toggleClass('light-power-on', zoneData['power'] == true);
-	zoneDiv.toggleClass('light-power-off', zoneData['power'] == false);
-	zoneDiv.toggleClass('light-power-null', zoneData['power'] == null);
+        zoneDiv.toggleClass('light-power-on', zoneData['power'] == true);
+        zoneDiv.toggleClass('light-power-off', zoneData['power'] == false);
+        zoneDiv.toggleClass('light-power-null', zoneData['power'] == null);
 
-	zoneDiv.toggleClass('light-color-null', !!zoneData['color']);
+        zoneDiv.toggleClass('light-color-null', !!zoneData['color']);
 
-	if (zoneData['color']) {
-	  zoneDiv.css('background-color', zoneData['color']);
-	}
+        if (zoneData['color']) {
+          zoneDiv.css('background-color', zoneData['color']);
+        }
 
-	zoneDiv.appendTo(zoneContainer);
-	// region is still hidden
-	zoneDiv.toggleClass('hidden');
+        zoneDiv.appendTo(zoneContainer);
+        // region is still hidden
+        zoneDiv.toggleClass('hidden');
       }
 
       hiddenZoneDiv.remove();
@@ -72,21 +72,4 @@ $(document).on('click', 'div.light-zone', function (e) {
   });
 });
 
-//updateView();
-//alert('click');
-//var $this = $(this);
-//var zone = $this.attr('light-zone');
-//              $this.toggleClass('light-on', data[group]['on']);
-//              $this.toggleClass('light-off', !data[group]['on']);
-//              $this.toggleClass('light-undef', false);
-//
-//              if (data[group]['on'] && data[group]['color']) {
-//                $this.css('background-color', data[group]['color']);
-//              } else {
-//                $this.css('background-color', '');
-//              }
-//
-//              if (data[group]['label']) {
-//                $this.text(data[group]['label']);
-//              }
-//});
+// vim: sw=2:ts=2:sts=2:expandtab
