@@ -36,24 +36,24 @@ get '/' do
   erb :index
 end
 
-get '/region' do
+get '/settings' do
   json Hash[Region.all.map { |region| [region.name, region.to_hash] }]
 end
 
-post '/region' do
+post '/settings' do
   validate_request @data or halt 400
   $queue << @data
   json :ok => true
 end
 
-post '/region/:region' do
+post '/settings/:region' do
   @data = { params[:region] => @data }
   validate_request @data or halt 400
   $queue << @data
   json :ok => true
 end
 
-post '/region/:region/zone/:zone' do
+post '/settings/:region/:zone' do
   @data = { params[:region] => { params[:zone] => @data } }
   validate_request @data or halt 400
   $queue << @data
