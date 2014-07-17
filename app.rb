@@ -14,17 +14,37 @@ $config = JSON.parse(File.read('config.json'))
 set :bind, $config['bind'] if $config.has_key? 'bind'
 set :port, $config['port'] if $config.has_key? 'port'
 
-$queue ||= Queue.new
-
+$worker_queue ||= Queue.new
 $worker ||= Thread.new do
   while true
-    request = $queue.pop
+    request, queue = $worker_queue.pop
+    response = nil
     begin
-      #puts "[#{Thread.current}] processing #{request.inspect}".blue
-      process_request request
+      if request == :settings
+        # noop
+      elsif request == :sync
+        puts "SYNC".cyan
+        Region.sync
+      elsif request.is_a?(Hash)
+        Region.apply request
+      elsif request.is_a?(Array)
+        Region.execute request
+      else
+        raise "invalid request: #{request.inspect}"
+      end
+      response = Region.to_hash
     rescue Exception => e
-      puts [e.message, *e.backtrace].map { |line| "[#{Thread.current}] #{line}" }
+      puts [e.message, *e.backtrace].map { |line| "[#{Thread.current}] #{line}".red }
+      response = {:ok => false}
     end
+    queue << response if queue
+  end
+end
+
+$syncer ||= Thread.new do
+  while true
+    sleep 30
+    $worker_queue << :sync
   end
 end
 
@@ -37,31 +57,76 @@ get '/' do
 end
 
 get '/settings' do
-  json Hash[Region.all.map { |region| [region.name, region.to_hash] }]
+  json sync_request(:settings)
 end
 
 post '/settings' do
-  validate_request @data or halt 400
-  $queue << @data
-  json :ok => true
+  validate_settings @data or halt 400
+  json sync_request(@data)
 end
 
 post '/settings/:region' do
   @data = { params[:region] => @data }
-  validate_request @data or halt 400
-  $queue << @data
-  json :ok => true
+  validate_settings @data or halt 400
+  json sync_request(@data)
 end
 
 post '/settings/:region/:zone' do
   @data = { params[:region] => { params[:zone] => @data } }
-  validate_request @data or halt 400
-  $queue << @data
-  json :ok => true
+  validate_settings @data or halt 400
+  json sync_request(@data)
+end
+
+post '/sequence' do
+  validate_sequence @data or halt 400
+  json sync_request(@data)
 end
 
 helpers do
-  def validate_request(data)
+  def sync_request(data)
+    response = Queue.new
+    $worker_queue << [data, response]
+    response = response.pop
+    halt 400 if response.is_a?(Hash) and response.has_key?(:ok) and !response[:ok]
+    response
+  end
+
+  def validate_sequence(data)
+    data.is_a?(Array) and data.all? { |step|
+      validate_step step
+    }
+  end
+
+  def validate_step(step)
+    if step.is_a?(Hash)
+      validate_settings step
+    else
+      validate_command step
+    end
+  end
+
+  def validate_command(step)
+    if step.is_a?(Hash)
+      validate_settings step
+    else
+      validate_command step
+    end
+  end
+
+  def validate_command(command)
+    return false unless command.is_a?(Array) and command.size > 0
+    command, *args = command
+    case command
+    when 'sleep'
+      true
+    when 'reset'
+      true
+    else
+      false
+    end
+  end
+
+  def validate_settings(data)
     data.each_pair.all? { |key, value|
       $config['regions'].has_key?(key) and
       validate_region(key, value)
@@ -97,15 +162,6 @@ helpers do
   end
 end
 
-def process_request(request)
-  request.each_pair do |region, zones|
-    region = Region.find(region)
-    zones.each_pair do |zone, settings|
-      region.zone(zone).apply settings
-    end
-  end
-end
-
 class Region
   def self.all
     $config['regions'].keys.map { |name| find name }
@@ -113,6 +169,45 @@ class Region
 
   def self.find(name)
     new name, $config['regions'][name]
+  end
+
+  def self.to_hash
+    Hash[all.map { |region| [region.name, region.to_hash] }]
+  end
+
+  def self.apply(settings)
+    settings.each_pair do |region, zones|
+      region = find(region)
+      zones.each_pair do |zone, settings|
+        region.zone(zone).apply settings
+      end
+    end
+  end
+
+  def self.execute(sequence)
+    old_settings = to_hash
+    sequence.each do |step|
+      puts "#{step.inspect}".green
+      if step.is_a?(Hash)
+        apply step
+      elsif step.is_a?(Array)
+        command, *args = step
+        case command
+        when 'sleep'
+          sleep args.first.to_f
+        when 'reset'
+          apply old_settings
+        else
+          raise "invalid command step: #{step.inspect}"
+        end
+      else
+        raise "invalid step type: #{step.inspect}"
+      end
+    end
+  end
+
+  def self.sync
+    all.each { |region| region.sync }
   end
 
   attr_reader :name, :bridge
@@ -133,6 +228,10 @@ class Region
 
   def to_hash
     Hash[@zones.map { |id, zone| [id, zone.to_hash] }]
+  end
+
+  def sync
+    @bridge.sync
   end
 end
 
@@ -165,6 +264,10 @@ class Bridge
     constants.map { |c| const_get(c) }.find { |c|
       c.is_a?(Class) and c < self and c.handles?(config)
     } or raise "no driver found to handle #{config.inspect}"
+  end
+
+  def sync
+    # noop in base class
   end
 end
 
@@ -201,14 +304,14 @@ class Bridge::LimitlessLed < Bridge
     unless brightness.is_a?(Fixnum) and brightness.between?(2, 27)
       raise "invalid brightness: #{brightness.inspect}"
     end
-    #puts "ZONE #{zone} BRIGHTNESS #{brightness}".red
+    puts "ZONE #{zone} BRIGHTNESS #{brightness}".red
     power_on zone
     sleep 0.1
     send 0x4e, brightness, 0x55
   end
 
   def white(zone)
-    #puts "ZONE #{zone} WHITE".red
+    puts "ZONE #{zone} WHITE".red
     power_on zone
     sleep 0.1
     send zone == 0 ? 0xc2 : 0xc5 + ((zone-1)*2), 0x00, 0x55
@@ -218,20 +321,24 @@ class Bridge::LimitlessLed < Bridge
     unless color.is_a?(Fixnum) and color.between?(0, 255)
       raise "invalid color: #{color.inspect}"
     end
-    #puts "ZONE #{zone} COLOR #{color}".red
+    puts "ZONE #{zone} COLOR #{color}".red
     power_on zone
     sleep 0.1
     send 0x40, color, 0x55
   end
 
   def power_on(zone)
-    #puts "ZONE #{zone} ON".red
+    puts "ZONE #{zone} ON".red
     send zone == 0 ? 0x42 : 0x45 + ((zone-1)*2), 0x00, 0x55
   end
 
   def power_off(zone)
-    #puts "ZONE #{zone} OFF".red
+    puts "ZONE #{zone} OFF".red
     send zone == 0 ? 0x41 : 0x46 + ((zone-1)*2), 0x00, 0x55
+  end
+
+  def sync
+    @zones[1..4].each { |zone| zone.sync }
   end
 
   private
@@ -259,7 +366,7 @@ class Bridge::LimitlessLed < Bridge
     end
 
     def to_hash
-      { 'power' => power, 'color' => color ? color.html : nil, 'brightness' => brightness }
+      { 'power' => power, 'color' => color, 'brightness' => brightness }
     end
 
     def power=(value)
@@ -278,7 +385,7 @@ class Bridge::LimitlessLed < Bridge
         else
           @color_code = color_code(color)
         end
-        @color = color
+        @color = color.html
       end
     end
 
@@ -341,6 +448,22 @@ class Bridge::LimitlessLed < Bridge
         end
       end
     end
+
+    def sync
+      if @power
+        unless @color.nil?
+          if @color_code.nil?
+            @bridge.white @zone
+          else
+            @bridge.color @zone, @color_code
+          end
+        end
+        @bridge.brightness @zone, @brightness unless @brightness.nil?
+        @bridge.power_on @zone if @color.nil? and @brightness.nil?
+      elsif !@power.nil?
+        @bridge.power_off @zone
+      end
+    end
   end
 
   class AllZones < Zone
@@ -382,6 +505,10 @@ class Bridge::LimitlessLed < Bridge
       @color = color
       @brightness = brightness
       super
+    end
+
+    def sync
+      # don't sync the "all" zone, sync individual zones instead
     end
   end
 end

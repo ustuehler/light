@@ -47,7 +47,7 @@ var updateView = function (data) {
 }
 
 var reloadData = function () {
-  $.getJSON('/region', null, function (data, textStatus, jqXHR) {
+  $.getJSON('/settings', null, function (data, textStatus, jqXHR) {
     updateView(data);
   });
 }
@@ -58,17 +58,15 @@ $(document).on('click', 'div.light-zone', function (e) {
   var $this = $(this);
   var region = $this.closest('.light-region').attr('light-region');
   var zone = $this.attr('light-zone');
+  var power = $this.hasClass('light-power-on');
+  var postData = {};
 
-  $.getJSON('/region', null, function (data, textStatus, jqXHR) {
-    var postData = {};
+  postData[region] = {};
+  postData[region][zone] = {};
+  postData[region][zone]['power'] = !power;
 
-    postData[region] = {};
-    postData[region][zone] = data[region][zone];
-    postData[region][zone]['power'] = !postData[region][zone]['power'];
-
-    $.post('/region', JSON.stringify(postData), function (data, textStatus, jqXHR) {
-      reloadData();
-    });
+  $.post('/settings', JSON.stringify(postData), function (data, textStatus, jqXHR) {
+    updateView(data);
   });
 });
 
