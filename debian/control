@@ -1,0 +1,8 @@
+Source: light
+Homepage: https://github.com/ustuehler/light
+Maintainer: Uwe Stuehler <uwe@bsdx.de>
+
+Package: light
+Architecture: all
+Depends: ruby (>= 2)
+Description: room light control service and web application
